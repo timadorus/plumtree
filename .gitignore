@@ -20,3 +20,5 @@ logs
 erln8.config
 .local_dialyzer_plt
 deps/*
+/.project
+/.settings/

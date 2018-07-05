@@ -73,7 +73,7 @@
          }).
 
 -record(metadata_iterator, {
-          prefix :: metadata_prefix(),
+          prefix :: metadata_prefix() | undefined,
           match  :: term(),
           pos    :: term(),
           obj    :: {metadata_key(), metadata_object()} | undefined,

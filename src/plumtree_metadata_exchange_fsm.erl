@@ -19,21 +19,18 @@
 %% -------------------------------------------------------------------
 -module(plumtree_metadata_exchange_fsm).
 
--behaviour(gen_fsm).
+-behaviour(gen_statem).
 
 %% API
 -export([start/2]).
 
-%% gen_fsm callbacks
--export([init/1, handle_event/3, handle_sync_event/4,
+%% gen_statem callbacks
+-export([init/1, callback_mode/0, handle_event/3, handle_sync_event/4,
          handle_info/3, terminate/3, code_change/4]).
 
-%% gen_fsm states
--export([prepare/2,
-         prepare/3,
-         update/2,
+%% gen_statem states
+-export([prepare/3,
          update/3,
-         exchange/2,
          exchange/3]).
 
 -define(SERVER, ?MODULE).
@@ -71,15 +68,19 @@
 %% to aqcuire the remote lock or to upate both trees.
 -spec start(node(), pos_integer()) -> {ok, pid()} | ignore | {error, term()}.
 start(Peer, Timeout) ->
-    gen_fsm:start(?MODULE, [Peer, Timeout], []).
+    gen_statem:start(?MODULE, [Peer, Timeout], []).
 
 %%%===================================================================
-%%% gen_fsm callbacks
+%%% gen_statem callbacks
 %%%===================================================================
+
+callback_mode() ->
+    state_functions.
 
 init([Peer, Timeout]) ->
-    gen_fsm:send_event(self(), start),
+    gen_statem:cast(self(), start),
     {ok, prepare, #state{peer=Peer,built=0,timeout=Timeout}}.
+
 
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
@@ -98,9 +99,9 @@ code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
 
 %%%===================================================================
-%%% gen_fsm states
+%%% gen_statem states
 %%%===================================================================
-prepare(start, State) ->
+prepare(cast, start, State) ->
     %% get local lock
     case plumtree_metadata_hashtree:lock() of
         ok ->
@@ -110,25 +111,34 @@ prepare(start, State) ->
         _Error ->
             {stop, normal, State}
     end;
-prepare(timeout, State=#state{peer=Peer}) ->
+
+prepare(cast, timeout, State=#state{peer=Peer}) ->
     %% getting remote lock timed out
     lager:error("metadata exchange with ~p timed out aquiring locks", [Peer]),
     {stop, normal, State};
-prepare({remote_lock, ok}, State) ->
-    %% getting remote lock succeeded
-    update(start, State);
-prepare({remote_lock, _Error}, State) ->
-    %% failed to get remote lock
-    {stop, normal, State}.
 
-update(start, State) ->
+prepare(cast, {remote_lock, ok}, State) ->
+    %% getting remote lock succeeded
+    update(cast, start, State);
+
+prepare(cast, {remote_lock, _Error}, State) ->
+    %% failed to get remote lock
+    {stop, normal, State};
+
+prepare({call, _from}, _Event, State) ->
+    {reply, ok, prepare, State}.
+
+
+update(cast, start, State) ->
     update_request(node()),
     update_request(State#state.peer),
     {next_state, update, State, State#state.timeout};
-update(timeout, State=#state{peer=Peer}) ->
+
+update(cast, timeout, State=#state{peer=Peer}) ->
     lager:error("metadata exchange with ~p timed out updating trees", [Peer]),
     {stop, normal, State};
-update(tree_updated, State) ->
+
+update(cast, tree_updated, State) ->
     Built = State#state.built + 1,
     case Built of
         2 ->
@@ -136,10 +146,15 @@ update(tree_updated, State) ->
         _ ->
             {next_state, update, State#state{built=Built}}
     end;
-update({update_error, _Error}, State) ->
-    {stop, normal, State}.
 
-exchange(timeout, State=#state{peer=Peer}) ->
+update(cast, {update_error, _Error}, State) ->
+    {stop, normal, State};
+
+update({call, _from}, _Event, State) ->
+    {reply, ok, update, State}.
+
+
+exchange(cast, timeout, State=#state{peer=Peer}) ->
     RemoteFun = fun(Prefixes, {get_bucket, {Level, Bucket}}) ->
                         plumtree_metadata_hashtree:get_bucket(Peer, Prefixes, Level, Bucket);
                    (Prefixes, {key_hashes, Segment}) ->
@@ -162,15 +177,9 @@ exchange(timeout, State=#state{peer=Peer}) ->
         false ->
             lager:debug("completed metadata exchange with ~p. nothing repaired", [Peer])
     end,
-    {stop, normal, State}.
+    {stop, normal, State};
 
-prepare(_Event, _From, State) ->
-    {reply, ok, prepare, State}.
-
-update(_Event, _From, State) ->
-    {reply, ok, update, State}.
-
-exchange(_Event, _From, State) ->
+exchange({call, _from}, _Event, State) ->
     {reply, ok, exchange, State}.
 
 %%%===================================================================
@@ -296,6 +305,6 @@ as_event(F) ->
     Self = self(),
     spawn_link(fun() ->
                        Result = F(),
-                       gen_fsm:send_event(Self, Result)
+                       gen_statem:cast(Self, Result)
                end),
     ok.
