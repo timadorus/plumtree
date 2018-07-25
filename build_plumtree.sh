@@ -104,8 +104,10 @@ function update {
     pull_source
 
     rebar3 eunit
+    rebar3 ct
     rebar3 cover
     rebar3 as test dialyzer
+
 
 }
 
@@ -131,6 +133,7 @@ function build {
 
     rebar3 deps
     rebar3 eunit
+    rebar3 ct
     rebar3 cover
     rebar3 as test dialyzer
 
