@@ -187,7 +187,7 @@ wait_until_converged(Nodes, Prefix, Key, ExpectedValue) ->
                                                               [{allow_put,
                                                                 false}])
                         end, Nodes))
-        end, 60*2, 500).
+        end, 120*2, 500).
 
 
 wait_until_sibling(Nodes, Prefix, Key) ->

@@ -125,7 +125,7 @@ start_node(Name, Config, Case) ->
                                 {ok, _Res} -> true;
                                 _ -> false
                             end
-                    end, 60, 500),
+                    end, 120, 500),
             Node;
         {error, already_started, Node} ->
             ct_slave:stop(Name),

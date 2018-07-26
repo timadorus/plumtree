@@ -119,6 +119,12 @@
 
 -export_type([tree/0, tree_node/0, handler_fun/1, remote_fun/0]).
 
+-ifdef(namespaced_types).
+-type hashtree_gb_set() :: gb_sets:set().
+-else.
+-type hashtree_gb_set() :: gb_set().
+-endif.
+
 -record(hashtree_tree, {
           %% the identifier for this tree. used as part of the ids
           %% passed to hashtree.erl and in keys used to store nodes in
@@ -138,7 +144,7 @@
           snapshot   :: ets:tab(),
 
           %% set of dirty leaves
-          dirty      :: gb_sets:set()
+          dirty      :: hashtree_gb_set()
          }).
 
 -define(ROOT, '$ht_root').
@@ -454,7 +460,7 @@ create_node(?ROOT, Tree) ->
     Opts = [{segment_path, NodePath}, {segments, NumSegs}, {width, Width}],
     %% destroy any data that previously existed because its lingering from
     %% a tree that was not properly destroyed
-    hashtree:destroy(NodePath),
+    ok = hashtree:destroy(NodePath),
     Node = hashtree:new(NodeId, Opts),
     set_node(?ROOT, Node, Tree);
 create_node([], Tree) ->
@@ -521,7 +527,7 @@ node_key_to_name({_TreeId, NodeName}) ->
 node_id(?ROOT, #hashtree_tree{id=TreeId}) ->
     {TreeId, <<0:176/integer>>};
 node_id(NodeName, #hashtree_tree{id=TreeId}) ->
-    <<NodeMD5:128/integer>> = crypto:hash(md5, (term_to_binary(NodeName))),
+    <<NodeMD5:128/integer>> = riak_core_util:md5(term_to_binary(NodeName)),
     {TreeId, <<NodeMD5:176/integer>>}.
 
 %% @private
@@ -559,7 +565,7 @@ data_root(Opts) ->
     case proplists:get_value(data_dir, Opts) of
         undefined ->
             Base = "/tmp/hashtree_tree",
-            <<P:128/integer>> = crypto:hash(md5, term_to_binary(erlang:timestamp())),
-            filename:join(Base, integer_to_list(P, 16));
+            <<P:128/integer>> = riak_core_util:md5(term_to_binary(erlang:timestamp())),
+            filename:join(Base, riak_core_util:integer_to_list(P, 16));
         Root -> Root
-end.
+    end.

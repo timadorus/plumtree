@@ -104,7 +104,8 @@ function update {
     pull_source
 
     rebar3 eunit
-    rebar3 ct
+    # https://github.com/erlang/rebar3/issues/1778
+    rebar3 ct  --readable=false
     rebar3 cover
     rebar3 as test dialyzer
 
@@ -133,7 +134,7 @@ function build {
 
     rebar3 deps
     rebar3 eunit
-    rebar3 ct
+    rebar3 ct  --readable=false
     rebar3 cover
     rebar3 as test dialyzer
 
